@@ -1,0 +1,21 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Trained models and preprocessors (binaries)
+models/*.joblib
+
+# Datasets
+dataset/dataset.csv
+
+# Captures and logs
+captures/
+logs/alerts.csv
+logs/ids_database.db
+
+# Environments
+.venv/
+venv/
+ENV/
+env/

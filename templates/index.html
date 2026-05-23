@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aegis NIDS — AI Intrusion Detection Command Center</title>
+    <meta name="description" content="Professional AI-powered real-time network intrusion detection system with Kibana-style dashboards and live packet analysis.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="app-layout">
+
+    <!-- ====================================================
+         LEFT SIDEBAR (Navigation + Controls)
+    ==================================================== -->
+    <aside class="sidebar-nav">
+        <div class="sidebar-top">
+            <div class="logo-area">
+                <i class="fa-solid fa-shield-halved logo-shield"></i>
+                <div class="logo-text">
+                    <h1>AEGIS NIDS</h1>
+                    <span>Intrusion Detection Command</span>
+                </div>
+            </div>
+
+            <nav class="nav-links">
+                <a href="javascript:void(0)" id="nav-dashboard" class="nav-link active" onclick="switchTab('dashboard')">
+                    <i class="fa-solid fa-chart-line"></i> Dashboard
+                </a>
+                <a href="javascript:void(0)" id="nav-simulator" class="nav-link" onclick="switchTab('simulator')">
+                    <i class="fa-solid fa-shield-virus"></i> Threat Simulator
+                </a>
+                <a href="javascript:void(0)" id="nav-model" class="nav-link" onclick="switchTab('model')">
+                    <i class="fa-solid fa-gears"></i> Model Profile
+                </a>
+            </nav>
+
+            <!-- Capture Controls -->
+            <div class="sidebar-controls">
+                <div class="sidebar-controls-label">CAPTURE CONTROLS</div>
+                <select id="interfaceSelect" class="custom-select">
+                    <option value="-1">Loading adapters...</option>
+                </select>
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-primary" onclick="startIDS()">
+                        <i class="fa-solid fa-play"></i> Start
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" onclick="stopIDS()" disabled>
+                        <i class="fa-solid fa-stop"></i> Stop
+                    </button>
+                </div>
+                <button id="clearBtn" class="btn btn-secondary btn-full" onclick="clearLogs()">
+                    <i class="fa-solid fa-trash-can"></i> Clear All Logs
+                </button>
+            </div>
+
+            <!-- Engine Status -->
+            <div class="sidebar-engine-status">
+                <div class="sidebar-controls-label">ENGINE STATUS</div>
+                <div class="status-row">
+                    <span>Packet Capture</span>
+                    <span id="captureStatusBadge" class="badge badge-stopped">STOPPED</span>
+                </div>
+                <div class="status-row">
+                    <span>Prediction Engine</span>
+                    <span id="predictionStatusBadge" class="badge badge-stopped">STOPPED</span>
+                </div>
+                <div class="status-row">
+                    <span>ML Model</span>
+                    <span id="modelStatus" style="color: var(--accent-blue); font-weight:600; font-size:0.75rem;">CHECKING...</span>
+                </div>
+                <div class="status-row">
+                    <span>Adapter</span>
+                    <span id="activeAdapterName" style="color: var(--text-secondary); font-size:0.75rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">None</span>
+                </div>
+            </div>
+
+            <!-- Resource Gauges -->
+            <div class="sidebar-resources">
+                <div class="sidebar-controls-label">SYSTEM LOAD</div>
+                <div class="resource-bar-wrapper">
+                    <div class="bar-label"><span>CPU</span><span id="cpuVal">0%</span></div>
+                    <div class="bar-track"><div id="cpuFill" class="bar-fill"></div></div>
+                </div>
+                <div class="resource-bar-wrapper" style="margin-top:0.75rem;">
+                    <div class="bar-label"><span>RAM</span><span id="ramVal">0%</span></div>
+                    <div class="bar-track"><div id="ramFill" class="bar-fill bar-fill-purple"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <span class="pulse-circle pulse-circle-red" id="sidebarStateDot"></span>
+            <span id="sidebarStateText" class="sidebar-state-text">Offline</span>
+        </div>
+    </aside>
+
+    <!-- ====================================================
+         MAIN CONTENT
+    ==================================================== -->
+    <main class="main-content">
+
+        <!-- ====================================================
+             TOP SOC COMMAND HEADER
+        ==================================================== -->
+        <header class="soc-header">
+            <div class="header-left">
+                <h2>AEGIS SECURITY OPERATIONS CENTER</h2>
+                <p class="header-desc">AI-Powered Real-Time Intrusion Detection System & Live Analysis</p>
+            </div>
+            <div class="header-right">
+                <div class="header-status-pill">
+                    <span class="pulse-circle pulse-circle-red" id="headerStateDot"></span>
+                    <span id="headerStateText">SYSTEM OFFLINE</span>
+                </div>
+                <div class="header-clock-wrap">
+                    <i class="fa-regular fa-clock"></i>
+                    <span id="headerClock">12:35:44 PM</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ================================
+             TAB 1: KIBANA DASHBOARD
+        ================================ -->
+        <div id="dashboardTab" class="tab-content active">
+
+            <!-- KPI Strip -->
+            <section class="kpi-strip">
+                <div class="kpi-card">
+                    <div id="statusIconBox" class="kpi-icon kpi-blue"><i class="fa-solid fa-network-wired"></i></div>
+                    <div class="kpi-info">
+                        <span>System State</span>
+                        <strong id="kpiStatus">Offline</strong>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon kpi-purple"><i class="fa-solid fa-box-open"></i></div>
+                    <div class="kpi-info">
+                        <span>Packets Sniffed</span>
+                        <strong id="kpiPackets">0</strong>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon kpi-teal"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                    <div class="kpi-info">
+                        <span>Active Flows</span>
+                        <strong id="kpiFlows">0</strong>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div id="alertIconBox" class="kpi-icon kpi-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="kpi-info">
+                        <span>Intrusions Detected</span>
+                        <strong id="kpiAlerts">0</strong>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Kibana Query Bar -->
+            <div class="kibana-query-bar">
+                <div class="query-input-wrap">
+                    <span class="query-tag query-tag-blue">QUERY</span>
+                    <span class="query-input-text">network.protocol : * AND event.action : *</span>
+                </div>
+                <div class="filter-tags">
+                    <span class="query-tag query-tag-green">
+                        <i class="fa-solid fa-circle" style="font-size:0.5rem;"></i> LIVE MONITORING
+                    </span>
+                    <span class="query-tag query-tag-yellow">TIME RANGE: Last 24h</span>
+                    <span class="kibana-refresh" id="kibanaRefreshBtn" onclick="pollStatus(); pollAlerts(); pollCharts();">
+                        <i class="fa-solid fa-rotate-right"></i> Refresh
+                    </span>
+                </div>
+            </div>
+
+            <!-- Kibana Row 1: Events Over Time + Event Types -->
+            <div class="kibana-row-wide">
+                <!-- Events Over Time (Line Chart) -->
+                <div class="kibana-panel panel-large">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">EVENTS OVER TIME</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-expand"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="chart-container chart-tall">
+                        <canvas id="throughputChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Event Types Donut -->
+                <div class="kibana-panel panel-small">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">EVENT TYPES</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-expand"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="chart-container chart-tall">
+                        <canvas id="eventTypePieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kibana Row 2: 4 small stat panels -->
+            <div class="kibana-row-4col">
+
+                <!-- IP Addresses -->
+                <div class="kibana-panel">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">TOP IP ADDRESSES</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-plus"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="mini-stat-table" id="ipAddrTable">
+                        <div class="mini-stat-empty">Waiting for data...</div>
+                    </div>
+                </div>
+
+                <!-- DNS Queries -->
+                <div class="kibana-panel">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">DNS QUERIES</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-plus"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="mini-stat-table" id="dnsTable">
+                        <div class="mini-stat-empty">Waiting for data...</div>
+                    </div>
+                </div>
+
+                <!-- HTTP Servers -->
+                <div class="kibana-panel">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">HTTP SERVERS</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-plus"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="mini-stat-table" id="httpTable">
+                        <div class="mini-stat-empty">Waiting for data...</div>
+                    </div>
+                </div>
+
+                <!-- Attack Breakdown -->
+                <div class="kibana-panel">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">ATTACK VECTORS</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-plus"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height:200px;">
+                        <canvas id="attackPieChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Kibana Row 3: User Agents + Content Types -->
+            <div class="kibana-row-2col">
+                <div class="kibana-panel">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">USER AGENTS</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-plus"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="mini-stat-table" id="uaTable">
+                        <div class="mini-stat-empty">Waiting for data...</div>
+                    </div>
+                </div>
+                <div class="kibana-panel">
+                    <div class="kibana-panel-header">
+                        <span class="kibana-panel-title">CONTENT TYPES</span>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-plus"></i></span>
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                    <div class="mini-stat-table" id="ctTable">
+                        <div class="mini-stat-empty">Waiting for data...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kibana Events Log Table -->
+            <div class="kibana-panel kibana-events-panel">
+                <div class="kibana-panel-header">
+                    <span class="kibana-panel-title">
+                        <i class="fa-solid fa-list-check" style="color:var(--accent-blue);"></i>&nbsp; INTRUSION ALERT LOG
+                    </span>
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <button class="btn btn-secondary" onclick="exportAlertsCSV()" style="padding: 0.2rem 0.65rem; font-size: 0.7rem;">
+                            <i class="fa-solid fa-file-csv"></i> Export CSV
+                        </button>
+                        <div class="kibana-panel-controls">
+                            <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="alertsTable">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Threat Vector</th>
+                                <th>Risk Severity</th>
+                                <th>Source Socket</th>
+                                <th>Destination Socket</th>
+                                <th>Proto</th>
+                                <th class="text-right">Flow Stats</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableBody">
+                            <tr><td colspan="7" class="no-alerts">No malicious flows detected in this session.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Raw Events Log Table -->
+            <div class="kibana-panel kibana-events-panel" style="margin-top:1rem;">
+                <div class="kibana-panel-header">
+                    <span class="kibana-panel-title">
+                        <i class="fa-solid fa-database" style="color:var(--text-secondary);"></i>&nbsp; RAW EVENTS
+                    </span>
+                    <div class="kibana-panel-controls">
+                        <span class="panel-ctrl"><i class="fa-solid fa-expand"></i></span>
+                        <span class="panel-ctrl"><i class="fa-solid fa-xmark"></i></span>
+                    </div>
+                </div>
+                <div class="table-wrapper" style="max-height:300px;">
+                    <table id="eventsTable">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Action</th>
+                                <th>Source IP</th>
+                                <th>Src Port</th>
+                                <th>Destination IP</th>
+                                <th>Dst Port</th>
+                                <th>Content-Type</th>
+                                <th>URL</th>
+                                <th>Indicator</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eventsTableBody">
+                            <tr><td colspan="9" class="no-alerts">No events captured yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ================================
+             TAB 2: THREAT SIMULATOR
+        ================================ -->
+        <div id="simulatorTab" class="tab-content">
+            <div class="simulator-intro-bar">
+                <i class="fa-solid fa-flask-vial" style="color:var(--accent-purple);font-size:1.5rem;"></i>
+                <div>
+                    <h3>Interactive Attack Simulator</h3>
+                    <p>Generate threat events to test NIDS detection. <strong>Safe Inject</strong> places flows directly onto the ML queue (no packets). <strong>Live Packets</strong> sends Scapy packets targeting loopback (127.0.0.1) — requires sniffer running on Loopback adapter.</p>
+                </div>
+            </div>
+
+            <div class="simulator-grid">
+
+                <div class="simulator-card">
+                    <div class="sim-card-header">
+                        <div class="sim-icon-box sim-portscan"><i class="fa-solid fa-network-wired"></i></div>
+                        <h4>Port Scan Sweep</h4>
+                    </div>
+                    <p class="sim-desc">Simulates a TCP SYN sweep across 15 sequential ports. Verifies the stateful filter requiring ≥5 unique ports before triggering an alert.</p>
+                    <div class="sim-actions">
+                        <button class="btn btn-primary btn-sm" onclick="triggerSimulation('port_scan', 'inject')">
+                            <i class="fa-solid fa-vial"></i> Safe Inject
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="triggerSimulation('port_scan', 'raw')">
+                            <i class="fa-solid fa-circle-play"></i> Live Packets
+                        </button>
+                    </div>
+                </div>
+
+                <div class="simulator-card">
+                    <div class="sim-card-header">
+                        <div class="sim-icon-box sim-ddos"><i class="fa-solid fa-fire-flame-curved"></i></div>
+                        <h4>DDoS UDP Flood</h4>
+                    </div>
+                    <p class="sim-desc">Floods port 80 with 120 high-frequency UDP packets. Tests DDoS packet count thresholds and ML classification accuracy.</p>
+                    <div class="sim-actions">
+                        <button class="btn btn-primary btn-sm" onclick="triggerSimulation('ddos', 'inject')">
+                            <i class="fa-solid fa-vial"></i> Safe Inject
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="triggerSimulation('ddos', 'raw')">
+                            <i class="fa-solid fa-circle-play"></i> Live Packets
+                        </button>
+                    </div>
+                </div>
+
+                <div class="simulator-card">
+                    <div class="sim-card-header">
+                        <div class="sim-icon-box sim-ftp"><i class="fa-solid fa-key"></i></div>
+                        <h4>FTP Brute Force</h4>
+                    </div>
+                    <p class="sim-desc">Simulates rapid login attempts on port 21 (FTP). Verifies dictionary-attack detection and high-risk protocol categorization.</p>
+                    <div class="sim-actions">
+                        <button class="btn btn-primary btn-sm" onclick="triggerSimulation('ftp_brute', 'inject')">
+                            <i class="fa-solid fa-vial"></i> Safe Inject
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="triggerSimulation('ftp_brute', 'raw')">
+                            <i class="fa-solid fa-circle-play"></i> Live Packets
+                        </button>
+                    </div>
+                </div>
+
+                <div class="simulator-card">
+                    <div class="sim-card-header">
+                        <div class="sim-icon-box sim-ssh"><i class="fa-solid fa-terminal"></i></div>
+                        <h4>SSH Brute Force</h4>
+                    </div>
+                    <p class="sim-desc">Simulates repeated SSH authentication handshake attempts on port 22. Validates encrypted transport layer feature extraction.</p>
+                    <div class="sim-actions">
+                        <button class="btn btn-primary btn-sm" onclick="triggerSimulation('ssh_brute', 'inject')">
+                            <i class="fa-solid fa-vial"></i> Safe Inject
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="triggerSimulation('ssh_brute', 'raw')">
+                            <i class="fa-solid fa-circle-play"></i> Live Packets
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="sim-note">
+                <i class="fa-solid fa-circle-info"></i>
+                <div>
+                    <strong>ICMP Ping Flood Detection:</strong> To trigger an ICMP flood alert, run <code>ping 1.1.1.1 -n 50</code> or <code>ping &lt;your-ip&gt; -n 50</code> in CMD while capture is active. The NIDS will detect this as <strong>DDoS (ICMP Flood) — CRITICAL</strong> once packet count reaches 30.
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================
+             TAB 3: MODEL PROFILE
+        ================================ -->
+        <div id="modelTab" class="tab-content">
+            <div class="model-training-container">
+
+                <div class="model-info-panel kibana-panel">
+                    <h3>Machine Learning Model Profile</h3>
+                    <p>The Aegis NIDS uses a <strong>Random Forest Classifier</strong> trained on cleaned flow data derived from the <strong>CICIDS2017</strong> intrusion dataset. The model evaluates 14 traffic features in real time to categorize network actions as benign or malicious.</p>
+                    <div class="model-stats-row">
+                        <div class="model-stat-item">
+                            <span>Algorithm</span>
+                            <strong>Random Forest (100 Estimators)</strong>
+                        </div>
+                        <div class="model-stat-item">
+                            <span>Max Tree Depth</span>
+                            <strong>18 Levels</strong>
+                        </div>
+                        <div class="model-stat-item">
+                            <span>Train / Test Split</span>
+                            <strong>80% / 20%</strong>
+                        </div>
+                        <div class="model-stat-item">
+                            <span>Test Accuracy</span>
+                            <strong style="color:var(--color-low);">100.00%</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="model-grid">
+                    <div class="kibana-panel visuals-panel">
+                        <div class="kibana-panel-header">
+                            <span class="kibana-panel-title"><i class="fa-solid fa-rotate"></i> MODEL RETRAINING</span>
+                        </div>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1.25rem;">Rebuild the Random Forest Classifier on simulated CICIDS2017-style datasets. Retraining runs in a background thread.</p>
+                        <div class="retrain-section">
+                            <h4 style="margin-bottom:0.25rem;">Re-evaluate Classification Parameters</h4>
+                            <p>Generate feature matrix and train sklearn Random Forest model.</p>
+                            <div id="retrainStatusText" style="font-size:0.85rem;font-weight:600;margin-bottom:1rem;color:var(--text-secondary);">Model ready</div>
+                            <button id="retrainBtn" class="btn btn-primary" onclick="retrainModel()" style="margin:0 auto; display:flex; justify-content:center; min-width:200px;">
+                                <i class="fa-solid fa-rotate"></i> Rebuild Classifier
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="kibana-panel sidebar-panel">
+                        <div class="kibana-panel-header">
+                            <span class="kibana-panel-title"><i class="fa-solid fa-file-shield"></i> PREPROCESSOR FILES</span>
+                        </div>
+                        <div class="status-row">
+                            <span>model.joblib</span>
+                            <span style="color:var(--color-low); font-weight:600;"><i class="fa-solid fa-circle-check"></i> Found</span>
+                        </div>
+                        <div class="status-row">
+                            <span>scaler.joblib</span>
+                            <span style="color:var(--color-low); font-weight:600;"><i class="fa-solid fa-circle-check"></i> Found</span>
+                        </div>
+                        <div class="status-row">
+                            <span>label_encoder.joblib</span>
+                            <span style="color:var(--color-low); font-weight:600;"><i class="fa-solid fa-circle-check"></i> Found</span>
+                        </div>
+                        <div class="status-row" style="margin-top:0.75rem;">
+                            <span>Classes trained</span>
+                            <span style="color:var(--text-primary);font-weight:600;">8</span>
+                        </div>
+                        <div class="status-row">
+                            <span>Features used</span>
+                            <span style="color:var(--text-primary);font-weight:600;">14</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
