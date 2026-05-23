@@ -31,7 +31,7 @@ Aegis NIDS is a production-style, machine-learning-based Network Intrusion Detec
 #### 1. Clone the Repository
 Open a terminal and clone the project:
 ```bash
-git clone https://github.com/yourusername/aegis-nids.git
+git clone https://github.com/DavidKuriyan/aegis-nids
 cd "aegis-nids"
 ```
 
